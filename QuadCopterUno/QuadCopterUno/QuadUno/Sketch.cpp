@@ -18,13 +18,10 @@ void CalibrateAcc();
 void WriteAccRegister(byte data, byte regaddress);
 void init_Compass(void );
 void ReadAcc();
-void get_Accelerometer(float roll, float pitch);
+void get_Accelerometer(float *roll, float *pitch);
 //End of Auto generated function prototypes by Atmel Studio
 
-
-
 float rotationThreshold = 1;
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //PID gain and limit settings
@@ -98,23 +95,18 @@ unsigned long outer_loop_timer = 0;
 void setup() {
   PORTB &= B00000000;
   Serial.begin(57600);
-  Serial3.begin(57600);
   Wire.begin();                                                //Start the I2C as master.
 
   //DDRD |= B11110000;                                         //Configure digital poort 4, 5, 6 and 7 as output.
-
-  //Configure digital poort 2, 3, 4 and 5 as output.
-  DDRE |= B00111000;//PWM 2,3, 5 = PE3 OUTPUT
-  DDRG |= B00100000;//PWM 4 OUTPUT
-
-  DDRB |= B10000000;
-
-  //DDRB |= B00110000;   //Configure digital poort 12 and 13 as output.
-  //Arduino (Atmega) pins default to inputs, so they don't need to be explicitly declared as inputs.
-
+  
+  /*-----Engine pins Relies on one HW Timer, using Servo library pins 2,3,4,5----------------------------*/
+  DDRD |= B00111100; //ddrd digital pins 2,3,4,5
+  
   //Use the led on the Arduino for startup indication
-  //digitalWrite(12, HIGH);                                      //Turn on the warning led.
-  PORTB |= B10000000;
+  //digitalWrite(12, HIGH);   
+  DDRB |= B00100000;
+  //Turn on the warning led.
+  PORTB |= B00100000;
 
   Wire.beginTransmission(0x6B);                                 //Start communication with the gyro (adress 1101001)
   Wire.write(0x20);                                            //We want to write to register 1 (20 hex)
@@ -140,12 +132,10 @@ void setup() {
     //We don't want the esc's to be beeping annoyingly. So let's give them a 1000us puls while calibrating the gyro.
     //PORTD |= B11110000;      //Set digital poort 4, 5, 6 and 7 high.
 
-    PORTE |= B00111000;//PWM 2,3, 5 = PE3 OUTPUT
-    PORTG |= B00100000;//PWM 4 OUTPUT
+	PORTD |= B00111100; //ddrd digital pins 2,3,4,5
     delayMicroseconds(1000);                                   //Wait 1000us.
-    //PORTD &= B00001111;                                        //Set digital poort 4, 5, 6 and 7 low.
-    PORTE &= B11000111;//PWM 2,3, 5 = PE3 OUTPUT
-    PORTG &= B11011111;//PWM 4 OUTPUT
+    PORTD &= B00001111;                                        //Set digital poort 4, 5, 6 and 7 low.
+	
     delay(3);                                                  //Wait 3 milliseconds before the next loop.
   }
   //Now that we have 2000 measures, we need to devide by 2000 to get the average gyro offset.
@@ -165,6 +155,8 @@ void setup() {
   //digitalWrite(12, LOW);                                       //Turn off the warning led.
   PORTB &= B00000000;
   Serial.println("Wait for receiver!");
+  
+  /*Configure RC interrupt vector*/
 
   PCICR |= (1 << PCIE0);                                       //Set PCIE0 to enable PCMSK0 scan.
   PCMSK0 |= (1 << PCINT0);                                     //Set PCINT0 (digital input 8) to trigger an interrupt on state change.
@@ -172,7 +164,8 @@ void setup() {
   PCMSK0 |= (1 << PCINT2);                                     //Set PCINT2 (digital input 10)to trigger an interrupt on state change.
   PCMSK0 |= (1 << PCINT3);                                     //Set PCINT3 (digital input 11)to trigger an interrupt on state change.
 
-  //Wait until the receiver is active and the throtle is set to the lower position.
+  
+  //Wait until the receiver is active and the throttle is set to the lower position.
 
   while (receiver_input_channel_3 < 1190 || receiver_input_channel_3 > 1270) {
     Serial.println("Waiting For throttle");
